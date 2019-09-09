@@ -1,6 +1,5 @@
 import pymongo
 import pathlib
-import sqlite3
 import os
 from getpass import getpass
 from dataclasses import dataclass
@@ -12,8 +11,6 @@ home_dir = str(pathlib.Path.home())
 
 if not os.path.exists(home_dir + "/.corem"):
     os.makedirs(home_dir + "/.corem", 0o755)
-
-conn = sqlite3.connect(home_dir + "/.corem/crator.db")
 
 
 @dataclass
@@ -51,7 +48,7 @@ class AccountManager:
         """
             Creates new accounts
         """
-        mail = input("Enter your email: ").strip()
+        mail = input("Enter your email: ").strip().lower()
         name = input("Enter your name: ").strip()
         pass_phrase = getpass("Enter password: ").strip()
         cpass = getpass("Confirm password: ").strip()
@@ -152,7 +149,7 @@ class AccountManager:
         except:
             print("No local or remote session found, falling back to login mode.")
 
-        mail = input("Enter email: ").strip()
+        mail = input("Enter email: ").strip().lower()
         password = getpass("Enter passphrase: ").strip()
 
         if (not mail) or (not password):
@@ -185,7 +182,6 @@ class AccountManager:
         self.is_authorized = False
         os.remove(home_dir + "/.corem/session.data")
         del self.account_data
-        exit(0)
 
 
 @dataclass
@@ -220,7 +216,7 @@ class ProjectManager:
             """
         
         CREATE TABLE IF NOT EXISTS PROJECTS (
-         ID            INTEGER AUTOINCREMENT  PRIMARY KEY    NOT NULL,
+         ID            INTEGER   PRIMARY KEY AUTOINCREMENT   NOT NULL ,
          NAME           TEXT                        NOT NULL,
          CATEGORY       TEXT                        NOT NULL,
          TAGS           TEXT                        NOT NULL,
@@ -245,10 +241,14 @@ class ProjectManager:
             print("{}. {} - {}".format(row[0], row[1], row[4]))
             i += 1
 
+        if i < 1:
+            return None
+            
         x = input("Enter Project id: ").strip()
         if not x or int(x) > i:
             return
 
+       
         print("Project with id: {} selected.".format(x))
         return int(x)
 
@@ -299,17 +299,17 @@ class ProjectManager:
     def add_files(self):
         pass
 
-    def delete_project(self):
-        print("Select Project to delete: ")
-        i = 0
+    def delete_project(self, x):
+        # print("Select Project to delete: ")
+        # i = 0
 
-        for row in self._cursor.execute("Select * from Projects;"):
-            print("{}. {} - {}".format(row[0], row[1], row[4]))
-            i += 1
+        # for row in self._cursor.execute("Select * from Projects;"):
+        #     print("{}. {} - {}".format(row[0], row[1], row[4]))
+        #     i += 1
 
-        x = input("Enter Project No to delete: ").strip()
-        if not x or int(x) > i:
-            return
+        # x = input("Enter Project No to delete: ").strip()
+        # if not x or int(x) > i:
+        #     return
 
         conf = input(
             "Are you sure you want to delete the project? (All related tasks will also be deleted) y/N:"
@@ -326,22 +326,22 @@ class ProjectManager:
 
         self._conn.commit()
 
-    def update_project(self):
+    def update_project(self, x):
         """
             Allow updating project details
         """
 
-        print("Select Project to update: ")
-        i = 0
-        print("ID. NAME  -  DESCRIPTION")
-        for row in self._cursor.execute("Select * from Projects;"):
-            print("{}. {} - {}".format(row[0], row[1], row[4]))
-            i += 1
+        # print("Select Project to update: ")
+        # i = 0
+        # print("ID. NAME  -  DESCRIPTION")
+        # for row in self._cursor.execute("Select * from Projects;"):
+        #     print("{}. {} - {}".format(row[0], row[1], row[4]))
+        #     i += 1
 
-        x = input("Enter Project id to update: ").strip()
+        # x = input("Enter Project id to update: ").strip()
 
-        if (not x) or int(x) > i:
-            return
+        # if (not x) or int(x) > i:
+        #     return
 
         project = self._cursor("Select * from Projects where id=?", x).fetchone()
         project_data = ProjectStructure(
@@ -382,7 +382,7 @@ class ProjectManager:
             end = project_data.end
 
         self._cursor.execute(
-            """UPDATE PROJECTS SET name = ?, category = ?, tags = ?, description = ?, start = ?, end = ? WHERE id = ? """,
+            """UPDATE PROJECTS SET name = ?, category = ?, tags = ?, description = ?, start = ?, end = ? WHERE id = ? ;""",
             (name, category, tags, description, start, end, x),
         )
 
@@ -401,6 +401,7 @@ class TaskStructure:
     status_info: str
     dependent_on: str
     project_id: str
+    author: str
 
 
 @dataclass
@@ -428,16 +429,17 @@ class TaskManager:
             - project_id
     """
 
-    def __init__(self, connection, author, project):
-        self.project_data = project
+    def __init__(self, connection, author, project_id):
+        self.project_id = project_id
         self.author = author
         self._conn = connection
         self._cursor = connection.cursor()
+        self.task = None
         self._cursor.execute(
             """
         
         CREATE TABLE IF NOT EXISTS TASKS (
-         ID            INTEGER AUTOINCREMENT  PRIMARY KEY    NOT NULL,
+         ID            INTEGER   PRIMARY KEY  AUTOINCREMENT  NOT NULL,
          PRIORITY       TEXT                        NOT NULL,
          OBJECTIVE      TEXT                        NOT NULL,
          DESCRIPTION    TEXT                        NOT NULL,
@@ -448,11 +450,13 @@ class TaskManager:
          DEPENDENT_ON   TEXT                        NOT NULL,
          PROJECT_ID     INTEGER                     NOT NULL,       
          CREATED_BY      TEXT                        NOT NULL
-         );
+         ); """
+         
+         )
 
-
+        self._cursor.execute("""
         CREATE TABLE IF NOT EXISTS TASKLOGS (
-         ID            INTEGER AUTOINCREMENT  PRIMARY KEY    NOT NULL,
+         ID            INTEGER   PRIMARY KEY  AUTOINCREMENT  NOT NULL,
          STATUS         TEXT                        NOT NULL,
          STATUS_INFO    TEXT                        NOT NULL,
          TASK_ID        INTEGER                        NOT NULL,       
@@ -462,6 +466,39 @@ class TaskManager:
         )
 
         self._conn.commit()
+
+
+    def _select_task(self):
+        print("Select Project: ")
+        i = 0
+        for row in self._cursor.execute("Select * from Tasks where project_id=?;",(self.project_id, )):
+            print("{}. {} - {}".format(row[0], row[1], row[4]))
+            i += 1
+
+        if i<1:
+            print("No records found\n")
+            return None
+        
+        x = input("Enter Task id: ").strip()
+        if not x or int(x) > i:
+            return None
+
+        row = self._cursor.execute("Select * from Tasks where id=?;",(int(x))).fetchone()
+        print("Task with id: {} selected.".format(x))
+        self.task = TaskStructure(
+            row[0],
+            row[1],
+            row[2],
+            row[3],
+            row[4],
+            row[5],
+            row[6],
+            row[7],
+            row[8],
+            row[9],
+            row[10],
+        )
+        return int(x)
 
     def add_task(self):
         """ 
@@ -475,7 +512,7 @@ class TaskManager:
             "Enter start date: ",
             "Enter end date (-1 for unknown) : ",
             "Enter current status: ",
-            "Enter status description"
+            "Enter status description: ",
             "Enter task_id(s) separated by comma(,) if task depends on other tasks (-1 in any-other case): ",
         ]
 
@@ -507,7 +544,7 @@ class TaskManager:
                 fields[5],
                 fields[6],
                 fields[7],
-                self.project_data.key,
+                self.project_id,
                 self.author,
             ),
         )
@@ -522,13 +559,19 @@ class TaskManager:
             fields[5],
             fields[6],
             fields[7],
-            self.project_data.key,
-            self.author,
+            self.project_id,
+            self.author
         )
 
         self._conn.commit()
 
     def add_task_log(self):
+        if not self.task:
+            self._select_task()
+
+        if not self.task:
+            return
+
         statements = ["Enter current status: ", "Enter status description"]
         fields = console_input(statements)
 
@@ -560,6 +603,12 @@ class TaskManager:
             Delete task and related logs
         """
 
+        if not self.task:
+            self._select_task()
+        
+        if not self.task:
+            return
+
         self._cursor.execute(""" DELETE FROM TASKS WHERE id=? ;""", (self.task.key,))
         self._cursor.execute(
             """ DELETE FROM TASKLOGS WHERE task_id = ?;""", (self.task.key,)
@@ -570,6 +619,13 @@ class TaskManager:
         """
             Update certain data about tasks 
         """
+        
+        if not self.task:
+            self._select_task()
+
+        if not self.task:
+            return
+
         statements = [
             "Enter task priority(0 for low, 1 for mid, 2 for high): ",
             "Enter end date (-1 for unknown) : ",
@@ -621,7 +677,7 @@ class Internals:
             """
         
         CREATE TABLE IF NOT EXISTS INTERNALS (
-         ID       INTEGER  AUTOINCREMENT  PRIMARY KEY    NOT NULL,
+         ID       INTEGER    PRIMARY KEY  AUTOINCREMENT  NOT NULL,
          NAME      TEXT                                  NOT NULL,
          EMAIL     TEXT                                  NOT NULL,
          PHONE    INTEGER                                        ,
@@ -669,9 +725,33 @@ class Internals:
         )
 
     def revoke(self):
+        print("Select Internal to revoke: ")
+        i = 0
+
+        for row in self._cursor.execute("Select * from Internals where project_id=?;", (self.project_id,)):
+            print("{}. {} - {}".format(row[0], row[1], row[2]))
+            i += 1
+        
+        if i<1:
+            print("No records found\n")
+            return
+        
+        x = input("Enter Internal id to revoke: ").strip()
+
+        if not x or int(x) > i:
+            return
+
+        conf = input(
+            "Are you sure you want to revoke the access? (All related tasks will also be deleted) y/N:"
+        ).strip()
+
+        if conf != "y" or conf != "yes":
+            return
+            
         self._cursor.execute(
-            """ DELETE FROM INTERNALS WHERE id=?;""", (self.internal.key)
+            """ DELETE FROM INTERNALS WHERE id=?;""", (int(x), )
         )
+
         self._conn.commit()
 
 
@@ -689,7 +769,7 @@ class Externals:
         Manage external contacts to a project (indirect contributors to the project.)
     """
 
-    def __init__(self, project_id, author, connection):
+    def __init__(self, connection, author,  project_id):
         self.project_id = project_id
         self.author = author
         self._conn = connection
@@ -698,7 +778,7 @@ class Externals:
             """
         
         CREATE TABLE IF NOT EXISTS EXTERNALS (
-         ID       INTEGER  AUTOINCREMENT  PRIMARY KEY    NOT NULL,
+         ID       INTEGER    PRIMARY KEY  AUTOINCREMENT  NOT NULL,
          NAME      TEXT                                  NOT NULL,
          EMAIL     TEXT                                  NOT NULL,
          PHONE    INTEGER                                        ,
@@ -738,13 +818,33 @@ class Externals:
 
         self._conn.commit()
 
-        self.external = InternalsStructure(
-            self._cursor.lastrowid, fields[0], fields[1], fields[2], fields[3]
-        )
 
     def revoke_access(self):
+        print("Select External to revoke: ")
+        i = 0
+
+        for row in self._cursor.execute("Select * from Externals where project_id=?;", (self.project_id,)):
+            print("{}. {} - {}".format(row[0], row[1], row[2]))
+            i += 1
+
+        if i<1:
+            print("No records found\n")
+            return
+
+        x = input("Enter External id to revoke: ").strip()
+
+        if not x or int(x) > i:
+            return
+
+        conf = input(
+            "Are you sure you want to revoke the access? (All related tasks will also be deleted) y/N:"
+        ).strip()
+
+        if conf != "y" or conf != "yes":
+            return
+            
         self._cursor.execute(
-            """ DELETE FROM EXTERNALS WHERE id=?;""", (self.external.key)
+            """ DELETE FROM EXTERNALS WHERE id=?;""", (x)
         )
         self._conn.commit()
 
